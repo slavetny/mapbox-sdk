@@ -1,10 +1,11 @@
-package com.slavetny.mapbox_sdk.ui
+package com.slavetny.mapbox_sdk.ui.fragment
 
 import android.annotation.SuppressLint
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.os.Bundle
 import android.os.Looper
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -35,10 +36,10 @@ import java.lang.Exception
 class MapFragment : BaseFragment(), OnMapReadyCallback {
 
     private lateinit var mapboxMap: MapboxMap
-    var routeCoordinates: ArrayList<Point> = ArrayList()
+    private var routeCoordinates: ArrayList<Point> = ArrayList()
     private var locationEngine: LocationEngine? = null
 
-    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?) =
+    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View =
         inflater.inflate(R.layout.fragment_map, container, false)
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -46,44 +47,6 @@ class MapFragment : BaseFragment(), OnMapReadyCallback {
 
         mapView?.onCreate(savedInstanceState)
         mapView?.getMapAsync(this)
-    }
-
-    @SuppressLint("MissingPermission")
-    private fun initLocationEngine() {
-        locationEngine = LocationEngineProvider.getBestLocationEngine(requireContext())
-
-        val request =
-            LocationEngineRequest.Builder(Constants.DEFAULT_INTERVAL_IN_MILLISECONDS)
-                .setPriority(LocationEngineRequest.PRIORITY_HIGH_ACCURACY)
-                .setMaxWaitTime(Constants.DEFAULT_INTERVAL_IN_MILLISECONDS * 5).build()
-
-        locationEngine?.requestLocationUpdates(request, callback, Looper.getMainLooper())
-        locationEngine?.getLastLocation(callback)
-    }
-
-    private val callback = object : LocationEngineCallback<LocationEngineResult> {
-        override fun onSuccess(result: LocationEngineResult?) {
-            if (routeCoordinates.size == 0) {
-                routeCoordinates.add(Point.fromLngLat(result?.lastLocation!!.longitude, result?.lastLocation!!.latitude))
-            } else if (Point.fromLngLat(result?.lastLocation!!.longitude, result?.lastLocation!!.latitude) != routeCoordinates.get(routeCoordinates.size - 1)) {
-                routeCoordinates.add(Point.fromLngLat(result?.lastLocation!!.longitude, result?.lastLocation!!.latitude))
-                drawLine()
-            }
-        }
-
-        override fun onFailure(exception: Exception) {
-
-        }
-    }
-
-    private fun drawLine() {
-        val source = mapboxMap.style?.getSourceAs<GeoJsonSource>("line-source")
-        source?.setGeoJson(FeatureCollection.fromFeatures(arrayOf(Feature.fromGeometry(LineString.fromLngLats(routeCoordinates)))))
-    }
-
-    private fun requestForLocationPermission() {
-        val permissions = arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION)
-        requestPermissions(permissions, 0)
     }
 
     override fun onMapReady(mapboxMap: MapboxMap) {
@@ -94,13 +57,36 @@ class MapFragment : BaseFragment(), OnMapReadyCallback {
 
             mapboxMap.style?.addSource(GeoJsonSource("line-source"))
 
-            it.addLayer(LineLayer("line-layer", "line-source").withProperties(PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
-                PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
-                PropertyFactory.lineOpacity(.7f),
-                PropertyFactory.lineWidth(7f),
-                PropertyFactory.lineColor(Color.parseColor("#3bb2d0"))
-            ))
+            it.addLayer(
+                LineLayer("line-layer", "line-source").withProperties(
+                    PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
+                    PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
+                    PropertyFactory.lineOpacity(.7f),
+                    PropertyFactory.lineWidth(7f),
+                    PropertyFactory.lineColor(Color.parseColor("#3bb2d0"))
+                )
+            )
         }
+    }
+
+    private val callback = object : LocationEngineCallback<LocationEngineResult> {
+        override fun onSuccess(result: LocationEngineResult) {
+            if (routeCoordinates.isEmpty()) {
+                routeCoordinates.add(Point.fromLngLat(result.lastLocation!!.longitude, result.lastLocation!!.latitude))
+            } else if (Point.fromLngLat(result.lastLocation!!.longitude, result.lastLocation!!.latitude) != routeCoordinates.get(routeCoordinates.size - 1)) {
+                routeCoordinates.add(Point.fromLngLat(result.lastLocation!!.longitude, result.lastLocation!!.latitude))
+                drawLine()
+            }
+        }
+
+        override fun onFailure(exception: Exception) {
+            Log.d("CallbackError", exception.message, exception)
+        }
+    }
+
+    private fun drawLine() {
+        val source = mapboxMap.style?.getSourceAs<GeoJsonSource>("line-source")
+        source?.setGeoJson(FeatureCollection.fromFeatures(arrayOf(Feature.fromGeometry(LineString.fromLngLats(routeCoordinates)))))
     }
 
     @SuppressLint("MissingPermission")
@@ -132,17 +118,34 @@ class MapFragment : BaseFragment(), OnMapReadyCallback {
         }
     }
 
+    private fun requestForLocationPermission() {
+        val permissions = arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION)
+        requestPermissions(permissions, 0)
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun initLocationEngine() {
+        locationEngine = LocationEngineProvider.getBestLocationEngine(requireContext())
+
+        val request =
+            LocationEngineRequest.Builder(Constants.DEFAULT_INTERVAL_IN_MILLISECONDS)
+                .setPriority(LocationEngineRequest.PRIORITY_HIGH_ACCURACY)
+                .setMaxWaitTime(Constants.DEFAULT_INTERVAL_IN_MILLISECONDS * 5).build()
+
+        locationEngine?.requestLocationUpdates(request, callback, Looper.getMainLooper())
+        locationEngine?.getLastLocation(callback)
+    }
+
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         when (requestCode) {
             0 -> {
                 if (grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                     enableLocationComponent(mapboxMap.style!!)
                 } else {
-                    Toast.makeText(requireContext(), "Error 404 kirya not found", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(requireContext(), "Permission not granted", Toast.LENGTH_SHORT).show()
+                    activity?.finish()
                 }
             }
-
-            else -> super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         }
     }
 }
